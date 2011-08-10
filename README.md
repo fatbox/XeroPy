@@ -7,7 +7,7 @@ Overview
 --------
 
 ```python
->>> from XeroPy import Xero, XeroException
+>>> from xero import Xero, XeroException
 >>> from datetime import datetime
 >>> xero = Xero(XERO_CONSUMER_KEY,
                 XERO_CONSUMER_SECRET,
