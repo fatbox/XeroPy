@@ -6,8 +6,6 @@ from api import XeroPrivateClient, XeroException
 from api import XERO_BASE_URL, XERO_API_URL
 import urllib
 
-__version__ = (1,0)
-
 class XeroException404(XeroException):
     pass
 
