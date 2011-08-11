@@ -9,7 +9,7 @@ setup(
         name="XeroPy",
         description="Pythonic ORM implementation of the Xero API",
         zip_safe= False,
-        version="1.0",
+        version="1.1",
         packages = ['xero',],
         install_requires=[
             'httplib2==0.6.0',
