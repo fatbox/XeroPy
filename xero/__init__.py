@@ -22,29 +22,26 @@ class XeroExceptionUnknown(XeroException):
     pass
 
 class Manager(object):
-
     DECORATED_METHODS = ('get', 'save', 'filter', 'all', 'put')
-    DATETIME_FIELDS   = (u'UpdatedDateUTC',)
-    BOOLEAN_FIELDS    = (u'IsSupplier', u'IsCustomer')
-    MULTY_LINES       = (u'LineItem', u'Phone', u'Address')
+    DATETIME_FIELDS = (u'UpdatedDateUTC',)
+    BOOLEAN_FIELDS = (u'IsSupplier', u'IsCustomer')
+    MULTI_LINES = (u'LineItem', u'Phone', u'Address', 'TaxRate')
     PLURAL_EXCEPTIONS = {'Addresse':'Address'}
 
     def __init__(self, name, client):
-        self.client      = client
-        self.__name__    = name
-        self.__list_word = name[:len(name)-1].title()
-        self.__set_decorators()
+        self.client = client
+        self.name = name
 
-    def __set_decorators(self):
+        # setup our singular variants of the name
+        # only if the name ends in 0
+        if name[-1] == "s":
+            self.singular = name[:len(name)-1]
+        else:
+            self.singular = name
+
         for method_name in self.DECORATED_METHODS:
             method = getattr(self, method_name)
             setattr(self, method_name, self.__get_data(method))
-
-    def get_url_postfix(self):
-        return self.__name__.title()
-
-    def get_not_plural(self):
-        return self.__name__[:len(self.__name__)-1].title()
 
     def walk_dom(self, dom):
         tree_list = tuple()
@@ -67,13 +64,13 @@ class Manager(object):
 
                 if len(data) == 1:
                     out[key] = data[0]
-                elif len(data) > 1 and key in self.MULTY_LINES and out:
+                elif len(data) > 1 and key in self.MULTI_LINES and out:
                     out  += (self.convert_to_dict(data),)
-                elif len(data) > 1 and key in self.MULTY_LINES:
+                elif len(data) > 1 and key in self.MULTI_LINES:
                     out   = (self.convert_to_dict(data),)
-                elif len(data) > 1 and key == self.__list_word and out:
+                elif len(data) > 1 and key == self.singular and out:
                     out += (self.convert_to_dict(data),)
-                elif len(data) > 1 and key == self.__list_word:
+                elif len(data) > 1 and key == self.singular:
                     out  = (self.convert_to_dict(data),)
                 elif len(data) > 1:
                     out[key] = self.convert_to_dict(data)
@@ -122,7 +119,7 @@ class Manager(object):
 
             elif _list_data:
                 for _d in _data:
-                    _plural_name  = self.PLURAL_EXCEPTIONS.get(_plural_name, _plural_name)
+                    _plural_name = self.PLURAL_EXCEPTIONS.get(_plural_name, _plural_name)
                     __elm = self.dict_to_xml(SubElement(_elm, _plural_name), _d)
 
             else:
@@ -131,31 +128,32 @@ class Manager(object):
         return root_elm
 
     def __prepare_data__for_save(self, data):
-        name = self.get_url_postfix()
         if isinstance(data, list) or isinstance(data, tuple):
-            root_elm = Element(name)
+            root_elm = Element(self.name)
             for d in data:
-                sub_elm = SubElement(root_elm, self.get_not_plural())
+                sub_elm = SubElement(root_elm, self.singular)
                 self.dict_to_xml(sub_elm, d)
         else:
-            root_elm = self.dict_to_xml(Element(self.get_not_plural()), data)
+            root_elm = self.dict_to_xml(Element(self.singular), data)
 
         return tostring(root_elm)
 
     def __get_results(self, data):
-        name     = self.get_url_postfix()
         response = data[u'Response']
-        result   = response.get(name, {})
-        single   = name[:len(name)-1]
-        return result if isinstance(result, tuple) else result[single] \
-               if result.has_key(single) else None
+        result = response.get(self.name, {})
+
+        if isinstance(result, tuple):
+            return result
+
+        if isinstance(result, dict) and result.has_key(self.singular):
+            return result[self.singular]
 
     def __get_data(self, func):
         def wrapper(*args, **kwargs):
             req_args = func(*args, **kwargs)
             response = self.client.request(*req_args)
-            body     = response[1]
-            headers  = response[0]
+            body = response[1]
+            headers = response[0]
             if headers['status'] == '200':
                 if headers['content-type'] == 'application/pdf':
                     return body
@@ -186,50 +184,51 @@ class Manager(object):
         return wrapper
 
     def get(self, id, headers=None):
-        name = self.get_url_postfix()
-        uri  = '/'.join([XERO_API_URL, name, id])
+        uri  = '/'.join([XERO_API_URL, self.name, id])
         return uri, 'GET', None, headers
 
-    def __save_data(self, data, method='PUT'):
-        headers = {"Content-Type" :
-                   "application/x-www-form-urlencoded; charset=utf-8"}
-        name = self.get_url_postfix()
-        uri  = '/'.join([XERO_API_URL, name])
+    def save(self, data, method='post'):
+        headers = {
+                "Content-Type": "application/x-www-form-urlencoded; charset=utf-8"
+                }
+        uri = '/'.join([XERO_API_URL, self.name])
         body = 'xml='+urllib.quote(self.__prepare_data__for_save(data))
         return uri, method, body, headers
 
-    def save(self, data):
-        return self.__save_data(data, method='post')
-
     def put(self, data):
-        return self.__save_data(data, method='PUT')
-
-    def get_filter_params(self, key, val):
-        if key in self.BOOLEAN_FIELDS:
-            return 'true' if val else 'false'
-        elif key in self.DATETIME_FIELDS:
-            return val.isoformat()
-        else:
-            return '"%s"' % str(val)
+        return self.save(data, method='PUT')
 
     def prepare_filtering_date(self, val):
-        isdt = isinstance(val, datetime)
-        val  = val.strftime('%a, %d %b %Y %H:%M:%S GMT') if isdt else '"%s"' % val
-        return {'If-Modified-Since' : val}
+        if isinstance(val, datetime):
+            val = val.strftime('%a, %d %b %Y %H:%M:%S GMT')
+        else:
+            val = '"%s"' % val
+        return {'If-Modified-Since': val}
 
     def filter(self, **kwargs):
         headers = None
-        name = self.get_url_postfix()
-        uri  = '/'.join([XERO_API_URL, name])
+        uri  = '/'.join([XERO_API_URL, self.name])
         if kwargs:
             if kwargs.has_key('Since'):
                 val     = kwargs['Since']
                 headers = self.prepare_filtering_date(val)
                 del kwargs['Since']
 
-            params = ['%s==%s' % (key.replace('_','.'),
-                       self.get_filter_params(key, kwargs[key])) \
-                                       for key in kwargs.keys()]
+            def get_filter_params():
+                if key in self.BOOLEAN_FIELDS:
+                    return 'true' if kwargs[key] else 'false'
+                elif key in self.DATETIME_FIELDS:
+                    return kwargs[key].isoformat()
+                else:
+                    return '"%s"' % str(kwargs[key])
+
+            def generate_param(key):
+                return '%s==%s' % (
+                        key.replace('_','.'),
+                        get_filter_params()
+                        )
+
+            params = [generate_param(key) for key in kwargs.keys()]
 
             if params:
                 uri += '?where=' + urllib.quote('&&'.join(params))
@@ -237,25 +236,29 @@ class Manager(object):
         return uri, 'GET', None, headers
 
     def all(self):
-        name = self.get_url_postfix()
-        uri  = '/'.join([XERO_API_URL, name])
+        uri = '/'.join([XERO_API_URL, self.name])
         return uri, 'GET', None, None
 
 class Xero(object):
-    """ Main object for retriving data from XERO """
+    """
+    An ORM interface to the Xero API
 
-    INSTANCES__LIST = (u'Contacts', u'Accounts', u'CreditNotes',
-                       u'Currencies', u'Invoices', u'Organisation',
-                       u'Payments', u'TaxRates', u'TrackingCategories')
+    This has only been tested with the Private API
+    """
+
+    OBJECT_LIST = (u'Contacts', u'Accounts', u'CreditNotes',
+                   u'Currencies', u'Invoices', u'Organisation',
+                   u'Payments', u'TaxRates', u'TrackingCategories')
 
     def __init__(self, consumer_key, consumer_secret, privatekey):
-        self.consumer_key    = consumer_key
-        self.consumer_secret = consumer_secret
-        self.privatekey      = privatekey
-        self.client = XeroPrivateClient(consumer_key, consumer_secret,
-                                        privatekey)
-        self.__set_managers(self.client)
+        # instantiate our private api client
+        client = XeroPrivateClient(consumer_key,
+                                   consumer_secret,
+                                   privatekey)
 
-    def __set_managers(self, client):
-         for name in self.INSTANCES__LIST:
+        # iterate through the list of objects we support, for
+        # each of them create an attribute on our self that is
+        # the lowercase name of the object and attach it to an
+        # instance of a Manager object to operate on it
+        for name in self.OBJECT_LIST:
             setattr(self, name.lower(), Manager(name, client))
