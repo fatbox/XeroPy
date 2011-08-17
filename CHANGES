@@ -1,3 +1,9 @@
+Version 1.2
+Released: August 17th, 2011
+
+* Refactor handling of special elements (boolean, datetime, etc)
+
+
 Version 1.1
 Released: August 10th, 2011
 

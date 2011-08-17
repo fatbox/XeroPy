@@ -23,8 +23,11 @@ class XeroExceptionUnknown(XeroException):
 
 class Manager(object):
     DECORATED_METHODS = ('get', 'save', 'filter', 'all', 'put')
-    DATETIME_FIELDS = (u'UpdatedDateUTC',)
+
+    DATETIME_FIELDS = (u'UpdatedDateUTC', u'Updated', u'FullyPaidOnDate')
+    DATE_FIELDS = (u'DueDate', u'Date')
     BOOLEAN_FIELDS = (u'IsSupplier', u'IsCustomer')
+
     MULTI_LINES = (u'LineItem', u'Phone', u'Address', 'TaxRate')
     PLURAL_EXCEPTIONS = {'Addresse':'Address'}
 
@@ -63,43 +66,36 @@ class Manager(object):
             for key, data in zip(keys, lists):
 
                 if len(data) == 1:
-                    out[key] = data[0]
-                elif len(data) > 1 and key in self.MULTI_LINES and out:
-                    out  += (self.convert_to_dict(data),)
-                elif len(data) > 1 and key in self.MULTI_LINES:
-                    out   = (self.convert_to_dict(data),)
-                elif len(data) > 1 and key == self.singular and out:
-                    out += (self.convert_to_dict(data),)
-                elif len(data) > 1 and key == self.singular:
-                    out  = (self.convert_to_dict(data),)
+                    # we're setting a value
+                    # check to see if we need to apply any special
+                    # formatting to the value
+                    val = data[0]
+                    if key in self.BOOLEAN_FIELDS:
+                        val = True if val.lower() == 'true' else False
+                    if key in self.DATETIME_FIELDS:
+                        val = parse(val)
+                    if key in self.DATE_FIELDS:
+                        val = parse(val).date()
+
+                    out[key] = val
+
+                elif len(data) > 1 and ((key in self.MULTI_LINES) or (key == self.singular)):
+                    # our data is a collection and needs to be handled as such
+                    if out:
+                        out += (self.convert_to_dict(data),)
+                    else:
+                        out = (self.convert_to_dict(data),)
+
                 elif len(data) > 1:
                     out[key] = self.convert_to_dict(data)
 
         elif len(deep_list) == 2:
-            key  = deep_list[0]
+            key = deep_list[0]
             data = deep_list[1]
             out[key] = self.convert_to_dict(data)
         else:
             out = deep_list[0]
         return out
-
-    def __convert_data(self, data):
-        if isinstance(data, tuple) or isinstance(data, list):
-            data = tuple([self.__convert_fields(line) for line in data])
-        elif isinstance(data, dict):
-            data = self.__convert_fields(data)
-        return data
-
-    def __convert_fields(self, data):
-        for key in self.BOOLEAN_FIELDS:
-            if data.has_key(key):
-                val = data[key]
-                val = True if val.lower() == 'true' else False
-                data[key] = val
-        for key in self.DATETIME_FIELDS:
-            if data.has_key(key):
-                data[key] = parse(data[key])
-        return data
 
     def dict_to_xml( self, root_elm, dict_data ):
         for key in dict_data.keys():
@@ -159,7 +155,7 @@ class Manager(object):
                     return body
                 dom  = parseString(body)
                 data = self.convert_to_dict(self.walk_dom(dom))
-                return self.__convert_data(self.__get_results(data))
+                return self.__get_results(data)
 
             elif headers['status'] == '404':
                 msg = ' : '.join([str(headers['status']), body])
