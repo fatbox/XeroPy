@@ -183,7 +183,7 @@ class Manager(object):
         uri  = '/'.join([XERO_API_URL, self.name, id])
         return uri, 'GET', None, headers
 
-    def save(self, data, method='post'):
+    def save_or_put(self, data, method='post'):
         headers = {
                 "Content-Type": "application/x-www-form-urlencoded; charset=utf-8"
                 }
@@ -191,8 +191,11 @@ class Manager(object):
         body = 'xml='+urllib.quote(self.__prepare_data__for_save(data))
         return uri, method, body, headers
 
+    def save(self, data):
+        return self.save_or_put(data, method='post')
+
     def put(self, data):
-        return self.save(data, method='PUT')
+        return self.save_or_put(data, method='PUT')
 
     def prepare_filtering_date(self, val):
         if isinstance(val, datetime):
