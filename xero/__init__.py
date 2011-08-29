@@ -222,12 +222,23 @@ class Manager(object):
                     return '"%s"' % str(kwargs[key])
 
             def generate_param(key):
-                return '%s==%s' % (
-                        key.replace('_','.'),
+                parts = key.split("__")
+                field = key.replace('_','.'),
+                fmt = '%s==%s'
+                if len(parts) == 2:
+                    # support filters:
+                    # Name__Contains=John becomes Name.Contains("John")
+                    if parts[1] in ["Contains", "StartsWith", "EndsWith"]:
+                        field = parts[0]
+                        fmt = ''.join(['%s.', parts[1], '(%s)'])
+
+                return fmt % (
+                        field,
                         get_filter_params()
                         )
 
             params = [generate_param(key) for key in kwargs.keys()]
+            print params
 
             if params:
                 uri += '?where=' + urllib.quote('&&'.join(params))
