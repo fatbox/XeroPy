@@ -238,7 +238,6 @@ class Manager(object):
                         )
 
             params = [generate_param(key) for key in kwargs.keys()]
-            print params
 
             if params:
                 uri += '?where=' + urllib.quote('&&'.join(params))
