@@ -223,7 +223,7 @@ class Manager(object):
 
             def generate_param(key):
                 parts = key.split("__")
-                field = key.replace('_','.'),
+                field = key.replace('_','.')
                 fmt = '%s==%s'
                 if len(parts) == 2:
                     # support filters:
