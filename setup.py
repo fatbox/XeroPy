@@ -12,7 +12,7 @@ setup(
         version="1.3",
         packages = ['xero',],
         install_requires=[
-            'httplib2==0.6.0',
+            'httplib2>=0.6.0',
             'oauth2==1.2.0',
             'SocksiPy-branch==1.02',
             ],
